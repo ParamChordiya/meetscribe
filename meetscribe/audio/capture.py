@@ -72,14 +72,29 @@ class AudioCapture:
         device: AudioDevice,
         target_buf: list[float],
         full_buf: list[float],
+        label: str = "device",
     ) -> sd.InputStream:
         native_sr = int(device.default_samplerate)
         target_sr = self._sr
+        _zero_chunks: list[int] = [0]  # mutable counter for zero-audio detection
 
         def _cb(indata: np.ndarray, frames: int, time_info, status) -> None:
             if not self._running:
                 return
             mono = indata[:, 0].astype(np.float32)
+            if float(np.max(np.abs(mono))) == 0.0:
+                _zero_chunks[0] += 1
+                if _zero_chunks[0] == 10:  # ~1s of consecutive silence
+                    import sys
+                    sys.stderr.write(
+                        f"\n[WARNING] {label!r} is delivering silence (all zeros).\n"
+                        "  macOS does this when microphone permission is denied.\n"
+                        "  Go to: System Settings → Privacy & Security → Microphone\n"
+                        "  and enable access for your terminal app.\n\n"
+                    )
+                    sys.stderr.flush()
+            else:
+                _zero_chunks[0] = 0
             if native_sr != target_sr:
                 g = gcd(native_sr, target_sr)
                 mono = resample_poly(mono, target_sr // g, native_sr // g).astype(np.float32)
@@ -158,11 +173,11 @@ class AudioCapture:
         self._mic_buf = []
         self._sys_buf = []
 
-        self._mic_stream = self._make_stream(self._mic_device, self._mic_buf, self._full_mic)
+        self._mic_stream = self._make_stream(self._mic_device, self._mic_buf, self._full_mic, label=self._mic_device.name)
         self._mic_stream.start()
 
         if self._sys_device is not None:
-            self._sys_stream = self._make_stream(self._sys_device, self._sys_buf, self._full_sys)
+            self._sys_stream = self._make_stream(self._sys_device, self._sys_buf, self._full_sys, label=self._sys_device.name)
             self._sys_stream.start()
 
         self._worker = threading.Thread(target=self._chunk_worker, daemon=True)

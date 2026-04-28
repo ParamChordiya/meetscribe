@@ -7,13 +7,31 @@ from rich.console import Console
 
 
 def check_microphone_permission() -> bool:
-    """Try opening a brief sounddevice InputStream to verify mic access."""
+    """Open a mic stream, read frames, and verify data is non-zero.
+
+    macOS silently delivers zeros when permission is denied — opening the
+    stream succeeds but the audio is all zeros. We must actually read samples.
+    """
+    import numpy as np
     try:
-        stream = sd.InputStream(channels=1, samplerate=16000, dtype="float32")
+        frames_read: list[np.ndarray] = []
+
+        def _cb(indata: np.ndarray, frames: int, time_info, status) -> None:
+            frames_read.append(indata.copy())
+
+        stream = sd.InputStream(
+            channels=1, samplerate=16000, dtype="float32", callback=_cb, blocksize=1024
+        )
         stream.start()
+        import time
+        time.sleep(0.5)
         stream.stop()
         stream.close()
-        return True
+
+        if not frames_read:
+            return False
+        audio = np.concatenate(frames_read)
+        return float(np.max(np.abs(audio))) > 0.0
     except Exception:
         return False
 
