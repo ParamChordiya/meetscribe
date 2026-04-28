@@ -62,6 +62,14 @@ class TranscriptionEngine:
                 f"threshold={self.SILENCE_THRESHOLD}\n"
             )
             _sys.stderr.flush()
+            if mic_rms == 0.0:
+                _sys.stderr.write(
+                    "[debug] WARNING: mic_rms is exactly 0 — the wrong input device may be\n"
+                    "  selected. Run: python3 -c \"import sounddevice as sd; "
+                    "print(sd.query_devices(sd.default.device[0]))\"\n"
+                    "  to see which device is active, then set audio.mic_device in config.\n"
+                )
+                _sys.stderr.flush()
 
         if mic_rms > self.SILENCE_THRESHOLD:
             for text, start, end in self._run_whisper(mic):

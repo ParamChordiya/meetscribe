@@ -109,11 +109,11 @@ class AudioCapture:
             if mic_ready and sys_ready:
                 with self._lock:
                     mic_chunk = np.array(self._mic_buf[: self._chunk_n], dtype=np.float32)
-                    self._mic_buf = self._mic_buf[self._chunk_n :]
+                    del self._mic_buf[: self._chunk_n]  # mutate in-place; keeps callback reference valid
 
                     if self._sys_device is not None:
                         sys_chunk = np.array(self._sys_buf[: self._chunk_n], dtype=np.float32)
-                        self._sys_buf = self._sys_buf[self._chunk_n :]
+                        del self._sys_buf[: self._chunk_n]
                     else:
                         sys_chunk = np.zeros(self._chunk_n, dtype=np.float32)
 
