@@ -5,7 +5,11 @@ from unittest.mock import patch
 import pytest
 
 from meetscribe.config import Config
-from meetscribe.detection.teams import _MEETING_WINDOW_KEYWORDS, MeetingDetector
+from meetscribe.detection.teams import (
+    _MEETING_WINDOW_KEYWORDS,
+    _TEAMS_NAV_TITLES,
+    MeetingDetector,
+)
 
 
 class TestMeetingKeywords:
@@ -33,9 +37,9 @@ class TestCoreaudioThreshold:
     def test_threshold_above_zero(self):
         assert MeetingDetector._COREAUDIO_MEETING_THRESHOLD > 0
 
-    def test_threshold_high_enough_to_avoid_idle_false_positive(self):
-        # Teams loads CoreAudio when idle; threshold must be > a few handles
-        assert MeetingDetector._COREAUDIO_MEETING_THRESHOLD >= 10
+    def test_threshold_above_idle_baseline(self):
+        # Observed idle baseline is 0-1 handles; active call shows ~4+
+        assert MeetingDetector._COREAUDIO_MEETING_THRESHOLD >= 2
 
 
 class TestCheckMeeting:
@@ -57,8 +61,20 @@ class TestCheckMeeting:
             with patch.object(detector, "_get_teams_pids", return_value=[]):
                 assert detector._check_meeting() is False
 
-    def test_returns_false_on_calendar_title(self, detector):
-        with patch.object(detector, "_get_teams_window_titles", return_value=["Meetings | Microsoft Teams"]):
+    def test_returns_false_on_nav_tab_titles(self, detector):
+        nav_titles = ["Calendar | Microsoft Teams", "Chat | Microsoft Teams", "Activity | Microsoft Teams"]
+        for title in nav_titles:
+            with patch.object(detector, "_get_teams_window_titles", return_value=[title]):
+                with patch.object(detector, "_get_teams_pids", return_value=[]):
+                    assert detector._check_meeting() is False, f"Nav tab should not trigger: {title!r}"
+
+    def test_returns_true_on_meeting_name_title(self, detector):
+        # New Teams client shows "<meeting name> | Microsoft Teams" during a call
+        with patch.object(detector, "_get_teams_window_titles", return_value=["temp | Microsoft Teams"]):
+            assert detector._check_meeting() is True
+
+    def test_returns_false_on_bare_microsoft_teams_title(self, detector):
+        with patch.object(detector, "_get_teams_window_titles", return_value=["Microsoft Teams"]):
             with patch.object(detector, "_get_teams_pids", return_value=[]):
                 assert detector._check_meeting() is False
 

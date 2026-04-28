@@ -17,7 +17,7 @@ _TEAMS_PROCESS_NAMES = frozenset({
     "teams",
 })
 
-# Only phrases that appear exclusively during an active call/meeting.
+# Phrases that appear exclusively during an active call/meeting.
 # Broad terms like "meeting", "mute", "participants" are intentionally excluded
 # because they appear in Teams' regular navigation and calendar views.
 _MEETING_WINDOW_KEYWORDS = frozenset({
@@ -27,6 +27,20 @@ _MEETING_WINDOW_KEYWORDS = frozenset({
     "in a meeting",
     "joined the meeting",
     "you're in a call",
+})
+
+# Teams new client (MSTeams) shows "<meeting name> | Microsoft Teams" during a call.
+# Regular navigation tabs follow the same pattern ("Activity | Microsoft Teams",
+# "Calendar | Microsoft Teams") so we exclude those known non-call titles.
+_TEAMS_NAV_TITLES = frozenset({
+    "microsoft teams",
+    "activity | microsoft teams",
+    "chat | microsoft teams",
+    "calendar | microsoft teams",
+    "calls | microsoft teams",
+    "files | microsoft teams",
+    "apps | microsoft teams",
+    "notifications | microsoft teams",
 })
 
 _TEAMS_APP_PATHS = [
@@ -42,9 +56,10 @@ class MeetingDetector:
     and CoreAudio file-handle inspection via lsof (fallback).
     """
 
-    # Teams loads CoreAudio even when idle (notifications).
-    # An active audio session (meeting) consistently shows a much higher count.
-    _COREAUDIO_MEETING_THRESHOLD = 15
+    # Teams loads CoreAudio even when idle (notifications) but only opens a
+    # small number of handles. An active audio session opens more; threshold
+    # of 2 catches live calls while staying above the idle baseline of 0-1.
+    _COREAUDIO_MEETING_THRESHOLD = 2
 
     def __init__(self, config: Config) -> None:
         self._config = config
@@ -103,9 +118,16 @@ class MeetingDetector:
     def _check_meeting(self) -> bool:
         titles = self._get_teams_window_titles()
         if titles:
-            joined = " ".join(t.lower() for t in titles)
-            if any(kw in joined for kw in _MEETING_WINDOW_KEYWORDS):
-                return True
+            for title in titles:
+                tl = title.lower().strip()
+                # Old Teams client: explicit call-state phrases
+                if any(kw in tl for kw in _MEETING_WINDOW_KEYWORDS):
+                    return True
+                # New Teams client (MSTeams): "<meeting name> | Microsoft Teams"
+                # Any title ending with "| microsoft teams" that isn't a known nav tab
+                # is the active call window.
+                if tl.endswith("| microsoft teams") and tl not in _TEAMS_NAV_TITLES:
+                    return True
 
         pids = self._get_teams_pids()
         if pids and self._teams_using_audio(pids):
