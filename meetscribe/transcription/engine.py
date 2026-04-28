@@ -18,10 +18,11 @@ class TranscriptionEngine:
                     or "Participant" if diarization is disabled/unavailable
     """
 
-    SILENCE_THRESHOLD = 0.001  # RMS below this → skip Whisper
+    SILENCE_THRESHOLD = 0.0005  # RMS below this → skip Whisper (lowered from 0.001)
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, debug: bool = False) -> None:
         self._config = config
+        self._debug = debug
         self._model: WhisperModel | None = None
         self._diarizer: SpeakerDiarizer | None = None
         self._session_start: float = 0.0
@@ -50,7 +51,19 @@ class TranscriptionEngine:
         elapsed = time.time() - self._session_start
         utterances: list[Utterance] = []
 
-        if self._has_speech(mic):
+        mic_rms = float(np.sqrt(np.mean(mic ** 2)))
+        sys_rms = float(np.sqrt(np.mean(system ** 2)))
+
+        if self._debug:
+            import sys as _sys
+            _sys.stderr.write(
+                f"[debug] chunk {len(mic)/self._config.audio.sample_rate:.1f}s  "
+                f"mic_rms={mic_rms:.5f}  sys_rms={sys_rms:.5f}  "
+                f"threshold={self.SILENCE_THRESHOLD}\n"
+            )
+            _sys.stderr.flush()
+
+        if mic_rms > self.SILENCE_THRESHOLD:
             for text, start, end in self._run_whisper(mic):
                 utterances.append(
                     Utterance(
@@ -60,8 +73,12 @@ class TranscriptionEngine:
                         confidence=1.0,
                     )
                 )
+            if self._debug and not utterances:
+                import sys as _sys
+                _sys.stderr.write("[debug] mic passed RMS but Whisper returned no segments\n")
+                _sys.stderr.flush()
 
-        if self._has_speech(system):
+        if sys_rms > self.SILENCE_THRESHOLD:
             speaker = self._identify_speaker(system)
             for text, start, end in self._run_whisper(system):
                 utterances.append(
@@ -102,11 +119,12 @@ class TranscriptionEngine:
         return float(np.sqrt(np.mean(audio ** 2))) > self.SILENCE_THRESHOLD
 
     def _run_whisper(self, audio: np.ndarray) -> list[tuple[str, float, float]]:
+        # vad_filter omitted: we already gate on RMS above, and silero VAD
+        # inside faster-whisper can aggressively drop real speech on quiet mics.
         segments, _ = self._model.transcribe(
             audio,
             beam_size=5,
             language="en",
-            vad_filter=True,
         )
         return [
             (seg.text.strip(), seg.start, seg.end)

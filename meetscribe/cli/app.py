@@ -23,8 +23,9 @@ console = Console()
 
 
 class MeetScribeApp:
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, debug: bool = False) -> None:
         self._config = config
+        self._debug = debug
         self._utterances: list[Utterance] = []
         self._recording = False
         self._capture: AudioCapture | None = None
@@ -39,7 +40,7 @@ class MeetScribeApp:
 
     def setup(self) -> None:
         console.print("[dim]Loading transcription model...[/dim]", end="")
-        self._engine = TranscriptionEngine(self._config)
+        self._engine = TranscriptionEngine(self._config, debug=self._debug)
         self._engine.load()
         console.print(" [green]ready[/green]")
 
@@ -289,11 +290,13 @@ class MeetScribeApp:
 @click.option("--manual", is_flag=True, help="Record immediately without waiting for Teams")
 @click.option("--model", default=None, help="Override Ollama model for this session")
 @click.option("--whisper", default=None, help="Override Whisper model size for this session")
+@click.option("--debug", is_flag=True, help="Print audio RMS and chunk info for troubleshooting")
 def main(
     setup: bool,
     manual: bool,
     model: str | None,
     whisper: str | None,
+    debug: bool,
 ) -> None:
     config = Config.load()
 
@@ -309,7 +312,7 @@ def main(
     if whisper:
         config.whisper_model = whisper
 
-    app = MeetScribeApp(config)
+    app = MeetScribeApp(config, debug=debug)
     app.setup()
 
     if manual:
