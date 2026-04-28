@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-from typing import Optional
 
 import numpy as np
 
@@ -51,7 +50,7 @@ class SpeakerDiarizer:
             if not self._profiles:
                 return self._new_speaker(embedding)
 
-            best_name: Optional[str] = None
+            best_name: str | None = None
             best_sim = -1.0
             for name, profile in self._profiles.items():
                 norm = np.linalg.norm(embedding) * np.linalg.norm(profile) + 1e-8

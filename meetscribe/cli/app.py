@@ -3,14 +3,12 @@ from __future__ import annotations
 import sys
 import threading
 from datetime import datetime
-from pathlib import Path
-from typing import Optional
 
 import click
 import numpy as np
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Prompt
 
 from meetscribe.audio.capture import AudioCapture
 from meetscribe.cli.first_run import run_first_run_wizard
@@ -29,11 +27,11 @@ class MeetScribeApp:
         self._config = config
         self._utterances: list[Utterance] = []
         self._recording = False
-        self._capture: Optional[AudioCapture] = None
-        self._engine: Optional[TranscriptionEngine] = None
-        self._detector: Optional[MeetingDetector] = None
-        self._ollama: Optional[OllamaClient] = None
-        self._meeting_start: Optional[datetime] = None
+        self._capture: AudioCapture | None = None
+        self._engine: TranscriptionEngine | None = None
+        self._detector: MeetingDetector | None = None
+        self._ollama: OllamaClient | None = None
+        self._meeting_start: datetime | None = None
         self._shutdown = threading.Event()
 
     # ── setup ─────────────────────────────────────────────────────────────────
@@ -258,8 +256,8 @@ class MeetScribeApp:
 def main(
     setup: bool,
     manual: bool,
-    model: Optional[str],
-    whisper: Optional[str],
+    model: str | None,
+    whisper: str | None,
 ) -> None:
     config = Config.load()
 

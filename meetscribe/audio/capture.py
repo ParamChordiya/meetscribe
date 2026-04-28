@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from math import gcd
-from typing import Callable, Optional, Tuple
 
 import numpy as np
 import sounddevice as sd
@@ -46,12 +46,12 @@ class AudioCapture:
         self._sys_buf: list[float] = []
         self._lock = threading.Lock()
 
-        self._mic_stream: Optional[sd.InputStream] = None
-        self._sys_stream: Optional[sd.InputStream] = None
-        self._worker: Optional[threading.Thread] = None
+        self._mic_stream: sd.InputStream | None = None
+        self._sys_stream: sd.InputStream | None = None
+        self._worker: threading.Thread | None = None
 
         self._mic_device: AudioDevice = self._resolve_mic()
-        self._sys_device: Optional[AudioDevice] = self._resolve_system()
+        self._sys_device: AudioDevice | None = self._resolve_system()
 
     def _resolve_mic(self) -> AudioDevice:
         if self._config.audio.mic_device:
@@ -60,7 +60,7 @@ class AudioCapture:
                 return dev
         return get_default_input()
 
-    def _resolve_system(self) -> Optional[AudioDevice]:
+    def _resolve_system(self) -> AudioDevice | None:
         if self._config.audio.system_device:
             return find_device_by_name(self._config.audio.system_device)
         return find_blackhole()
@@ -168,7 +168,7 @@ class AudioCapture:
         self._worker = threading.Thread(target=self._chunk_worker, daemon=True)
         self._worker.start()
 
-    def stop(self) -> Tuple[np.ndarray, np.ndarray]:
+    def stop(self) -> tuple[np.ndarray, np.ndarray]:
         """Stop capture. Returns (full_mic_audio, full_system_audio) as float32 arrays."""
         self._running = False
 
@@ -197,5 +197,5 @@ class AudioCapture:
         return self._mic_device.name
 
     @property
-    def system_device_name(self) -> Optional[str]:
+    def system_device_name(self) -> str | None:
         return self._sys_device.name if self._sys_device else None

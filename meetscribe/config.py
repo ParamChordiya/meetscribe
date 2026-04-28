@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import ClassVar, Optional
+from typing import ClassVar
 
 import yaml
 
 
 @dataclass
 class AudioSettings:
-    mic_device: Optional[str] = None      # None = system default
-    system_device: Optional[str] = None   # BlackHole device name; None = auto-detect
+    mic_device: str | None = None      # None = system default
+    system_device: str | None = None   # BlackHole device name; None = auto-detect
     sample_rate: int = 16000
     chunk_seconds: int = 20               # seconds per transcription chunk
 

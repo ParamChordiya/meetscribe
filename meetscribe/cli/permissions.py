@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import subprocess
-from typing import Optional
 
 import sounddevice as sd
 from rich.console import Console

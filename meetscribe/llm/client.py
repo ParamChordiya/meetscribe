@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import webbrowser
-from typing import Iterator, Optional
+from collections.abc import Iterator
 
 import requests
 from rich.console import Console
@@ -92,7 +92,7 @@ class OllamaClient:
 
     # ── setup wizard ──────────────────────────────────────────────────────────
 
-    def run_setup_wizard(self, console: Console) -> Optional[str]:
+    def run_setup_wizard(self, console: Console) -> str | None:
         """Interactive Ollama setup wizard. Returns chosen model name or None if aborted."""
         console.print(Panel("[bold]Ollama Setup[/bold]", style="blue"))
 
@@ -134,7 +134,7 @@ class OllamaClient:
 
         return self.change_model(console)
 
-    def change_model(self, console: Console) -> Optional[str]:
+    def change_model(self, console: Console) -> str | None:
         """Let user choose from available models or pull a new one."""
         models = self.list_models()
         table = Table(title="Available Models", show_header=True)
@@ -162,7 +162,7 @@ class OllamaClient:
         self._config.ollama_model = chosen
         return chosen
 
-    def _pick_recommended(self, console: Console) -> Optional[str]:
+    def _pick_recommended(self, console: Console) -> str | None:
         table = Table(title="Recommended Models", show_header=True)
         table.add_column("#", style="cyan", width=4)
         table.add_column("Model")

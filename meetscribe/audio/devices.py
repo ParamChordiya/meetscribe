@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import sounddevice as sd
 from rich.console import Console
@@ -38,7 +37,7 @@ def list_input_devices() -> list[AudioDevice]:
     return result
 
 
-def find_blackhole() -> Optional[AudioDevice]:
+def find_blackhole() -> AudioDevice | None:
     """Return the first BlackHole input device found, or None."""
     for d in list_input_devices():
         if "blackhole" in d.name.lower():
@@ -46,7 +45,7 @@ def find_blackhole() -> Optional[AudioDevice]:
     return None
 
 
-def find_device_by_name(name: str) -> Optional[AudioDevice]:
+def find_device_by_name(name: str) -> AudioDevice | None:
     """Case-insensitive partial name match on input devices."""
     name_lower = name.lower()
     for d in list_input_devices():

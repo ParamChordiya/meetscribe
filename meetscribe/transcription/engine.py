@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-from typing import Optional
 
 import numpy as np
 from faster_whisper import WhisperModel  # type: ignore
@@ -23,8 +22,8 @@ class TranscriptionEngine:
 
     def __init__(self, config: Config) -> None:
         self._config = config
-        self._model: Optional[WhisperModel] = None
-        self._diarizer: Optional[SpeakerDiarizer] = None
+        self._model: WhisperModel | None = None
+        self._diarizer: SpeakerDiarizer | None = None
         self._session_start: float = 0.0
 
     def load(self) -> None:

@@ -4,7 +4,7 @@ import os
 import subprocess
 import threading
 import time
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import psutil
 
@@ -49,7 +49,7 @@ class MeetingDetector:
     def __init__(self, config: Config) -> None:
         self._config = config
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._in_meeting = False
         self._consecutive_hits = 0   # debounce: require 2 positive polls to start
 
