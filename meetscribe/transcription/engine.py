@@ -29,11 +29,7 @@ class TranscriptionEngine:
 
     def load(self) -> None:
         """Load Whisper model and optionally the diarizer."""
-        self._model = WhisperModel(
-            self._config.whisper_model,
-            device="cpu",
-            compute_type="int8",
-        )
+        self._model = self._load_whisper_model()
         if self._config.speaker_diarization:
             self._diarizer = SpeakerDiarizer()
             try:
@@ -80,6 +76,28 @@ class TranscriptionEngine:
 
         utterances.sort(key=lambda u: u.timestamp)
         return utterances
+
+    def _load_whisper_model(self) -> WhisperModel:
+        """Download and load the Whisper model, retrying with SSL verification
+        disabled on corporate networks that use self-signed certificates."""
+        kwargs = dict(device="cpu", compute_type="int8")
+        try:
+            return WhisperModel(self._config.whisper_model, **kwargs)
+        except Exception as first_err:
+            err_str = str(first_err)
+            if any(kw in err_str for kw in ("CERTIFICATE_VERIFY_FAILED", "SSL", "ConnectError", "SSLError")):
+                import os
+                os.environ["HF_HUB_DISABLE_SSL_VERIFY"] = "1"
+                try:
+                    return WhisperModel(self._config.whisper_model, **kwargs)
+                except Exception:
+                    pass
+            raise RuntimeError(
+                f"Failed to load Whisper model '{self._config.whisper_model}'.\n"
+                "If you are on a corporate network with SSL inspection, run:\n"
+                "  export HF_HUB_DISABLE_SSL_VERIFY=1\n"
+                "then try again."
+            ) from first_err
 
     def _has_speech(self, audio: np.ndarray) -> bool:
         return float(np.sqrt(np.mean(audio ** 2))) > self.SILENCE_THRESHOLD
