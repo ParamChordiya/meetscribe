@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [project.scripts]
-meetscribe = "main:main"
+meetscribe = "meetscribe.cli.app:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
