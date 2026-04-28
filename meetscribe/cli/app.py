@@ -38,6 +38,7 @@ class MeetScribeApp:
         self._meeting_start: datetime | None = None
         self._shutdown = threading.Event()
         self._meeting_ended = threading.Event()  # signals main thread to run post-meeting menu
+        self._interactive = threading.Event()    # set while main thread owns stdin (menus)
 
     # ── setup ─────────────────────────────────────────────────────────────────
 
@@ -88,6 +89,10 @@ class MeetScribeApp:
         """Background thread: reads single-char commands from stdin."""
         def _listen() -> None:
             while not self._shutdown.is_set():
+                if self._interactive.is_set():
+                    # Main thread owns stdin; back off and retry
+                    self._shutdown.wait(timeout=0.2)
+                    continue
                 try:
                     cmd = input().strip().lower()
                 except EOFError:
@@ -159,14 +164,18 @@ class MeetScribeApp:
 
     def _process_ended_meeting(self) -> None:
         """Called on the main thread after a meeting ends."""
-        console.print(Panel("[bold yellow]Meeting ended — processing...[/bold yellow]"))
+        self._interactive.set()
+        try:
+            console.print(Panel("[bold yellow]Meeting ended — processing...[/bold yellow]"))
 
-        if not self._utterances:
-            console.print("[dim]No speech detected.[/dim]")
-            return
+            if not self._utterances:
+                console.print("[dim]No speech detected.[/dim]")
+                return
 
-        self._show_transcript()
-        self._post_meeting_menu()
+            self._show_transcript()
+            self._post_meeting_menu()
+        finally:
+            self._interactive.clear()
 
     def _on_audio_chunk(self, mic: np.ndarray, system: np.ndarray) -> None:
         try:
@@ -205,9 +214,20 @@ class MeetScribeApp:
                 "[yellow]Ollama is not running — skipping generation.[/yellow]\n"
                 "Start Ollama and re-run meetscribe to generate notes from a saved transcript."
             )
-            if self._utterances:
-                self._save_results({})
+            self._save_results({})
             return
+
+        # Ensure the configured model is actually downloaded.
+        available_models = self._ollama.list_models()
+        if self._config.ollama_model not in available_models:
+            console.print(
+                f"[yellow]Model [cyan]{self._config.ollama_model}[/cyan] is not downloaded.[/yellow]\n"
+                f"Available: {available_models or '(none)'}"
+            )
+            chosen = self._ollama.change_model(console)
+            if not chosen:
+                self._save_results({})
+                return
 
         console.print("\n[bold]Generate:[/bold]")
         console.print("  [cyan]1[/cyan]  Meeting notes")
@@ -230,18 +250,20 @@ class MeetScribeApp:
         for kind in kinds:
             parts: list[str] = []
             title = f"[bold blue]{kind.title()}[/bold blue]"
+            console.print(f"\n[dim]Generating {kind} with {self._config.ollama_model}…[/dim]")
             try:
                 with Live(
-                    Spinner("dots", text=f"[dim]Generating {kind}…[/dim]"),
+                    Spinner("dots", text=f"[dim]Waiting for first token…[/dim]"),
                     console=console,
                     refresh_per_second=15,
-                    transient=False,
+                    transient=True,  # clear spinner once tokens arrive
                 ) as live:
                     for token in self._ollama.generate_stream(self._utterances, kind):
                         parts.append(token)
                         live.update(Panel(Text("".join(parts)), title=title))
             except Exception as e:
                 console.print(f"[red]Generation failed: {e}[/red]")
+            # Print final result (transient=True means Live cleared itself)
             if parts:
                 console.print(Panel(Text("".join(parts)), title=title))
             results[kind] = "".join(parts)
