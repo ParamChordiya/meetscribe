@@ -60,7 +60,7 @@ class MeetScribeApp:
             f"Whisper [cyan]{self._config.whisper_model}[/cyan]  •  "
             f"Model [cyan]{self._config.ollama_model}[/cyan]  •  "
             f"Diarization [cyan]{'on' if self._config.speaker_diarization else 'off'}[/cyan]\n"
-            "Press [bold]Ctrl+C[/bold] to quit",
+            "Commands: [bold]s[/bold] = start  [bold]e[/bold] = end  [bold]Ctrl+C[/bold] = quit",
             style="green",
         ))
 
@@ -68,11 +68,10 @@ class MeetScribeApp:
             on_start=self._on_meeting_start,
             on_end=self._on_meeting_end,
         )
+        self._start_stdin_listener()
 
         try:
             while not self._shutdown.is_set():
-                # Block until either a meeting ends or Ctrl+C.
-                # Timeout lets KeyboardInterrupt propagate promptly.
                 if self._meeting_ended.wait(timeout=1.0):
                     self._meeting_ended.clear()
                     self._process_ended_meeting()
@@ -80,6 +79,29 @@ class MeetScribeApp:
             pass
         finally:
             self._cleanup()
+
+    def _start_stdin_listener(self) -> None:
+        """Background thread: reads single-char commands from stdin."""
+        def _listen() -> None:
+            while not self._shutdown.is_set():
+                try:
+                    cmd = input().strip().lower()
+                except EOFError:
+                    break
+                if cmd == "s":
+                    if not self._recording:
+                        console.print("[dim]Manual start...[/dim]")
+                        self._on_meeting_start()
+                    else:
+                        console.print("[dim]Already recording.[/dim]")
+                elif cmd == "e":
+                    if self._recording:
+                        console.print("[dim]Manual end...[/dim]")
+                        self._on_meeting_end()
+                    else:
+                        console.print("[dim]Not currently recording.[/dim]")
+
+        threading.Thread(target=_listen, daemon=True).start()
 
     def start_manual(self) -> None:
         self._on_meeting_start()
@@ -292,11 +314,16 @@ def main(
 
     if manual:
         console.print(Panel(
-            "[bold]Manual mode[/bold] — recording started.\n"
-            "Press [bold]Enter[/bold] to stop.",
+            "[bold]Manual mode[/bold]\n"
+            "Press [bold]Enter[/bold] to start recording.",
             style="cyan",
         ))
+        try:
+            input()
+        except KeyboardInterrupt:
+            return
         app.start_manual()
+        console.print("[dim]Recording… press [bold]Enter[/bold] to stop.[/dim]")
         try:
             input()
         except KeyboardInterrupt:
