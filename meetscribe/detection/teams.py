@@ -17,15 +17,16 @@ _TEAMS_PROCESS_NAMES = frozenset({
     "teams",
 })
 
+# Only phrases that appear exclusively during an active call/meeting.
+# Broad terms like "meeting", "mute", "participants" are intentionally excluded
+# because they appear in Teams' regular navigation and calendar views.
 _MEETING_WINDOW_KEYWORDS = frozenset({
-    "meeting",
     "call in progress",
     "video call",
     "audio call",
     "in a meeting",
-    "participants",
-    "mute",
-    "unmute",
+    "joined the meeting",
+    "you're in a call",
 })
 
 _TEAMS_APP_PATHS = [
@@ -41,11 +42,16 @@ class MeetingDetector:
     and CoreAudio file-handle inspection via lsof (fallback).
     """
 
+    # Teams loads CoreAudio even when idle (notifications).
+    # An active audio session (meeting) consistently shows a much higher count.
+    _COREAUDIO_MEETING_THRESHOLD = 15
+
     def __init__(self, config: Config) -> None:
         self._config = config
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._in_meeting = False
+        self._consecutive_hits = 0   # debounce: require 2 positive polls to start
 
     def start(
         self,
@@ -69,19 +75,29 @@ class MeetingDetector:
 
     def _poll_loop(self, on_start: Callable, on_end: Callable) -> None:
         while self._running:
-            now_in = self._check_meeting()
-            if now_in and not self._in_meeting:
+            detected = self._check_meeting()
+
+            if detected:
+                self._consecutive_hits += 1
+            else:
+                self._consecutive_hits = 0
+
+            # Require 2 consecutive positive polls before declaring meeting start.
+            # This prevents a single transient false positive from triggering recording.
+            if self._consecutive_hits >= 2 and not self._in_meeting:
                 self._in_meeting = True
                 try:
                     on_start()
                 except Exception:
                     pass
-            elif not now_in and self._in_meeting:
+            elif not detected and self._in_meeting:
                 self._in_meeting = False
+                self._consecutive_hits = 0
                 try:
                     on_end()
                 except Exception:
                     pass
+
             time.sleep(self._config.poll_interval)
 
     def _check_meeting(self) -> bool:
@@ -150,7 +166,8 @@ class MeetingDetector:
                 text=True,
                 timeout=5,
             )
-            return int(result.stdout.strip() or "0") > 0
+            count = int(result.stdout.strip() or "0")
+            return count >= self._COREAUDIO_MEETING_THRESHOLD
         except Exception:
             return False
 
