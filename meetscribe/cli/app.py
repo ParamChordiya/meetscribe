@@ -7,8 +7,11 @@ from datetime import datetime
 import click
 import numpy as np
 from rich.console import Console
+from rich.live import Live
 from rich.panel import Panel
 from rich.prompt import Prompt
+from rich.spinner import Spinner
+from rich.text import Text
 
 from meetscribe.audio.capture import AudioCapture
 from meetscribe.cli.first_run import run_first_run_wizard
@@ -225,15 +228,22 @@ class MeetScribeApp:
 
         results: dict[str, str] = {}
         for kind in kinds:
-            console.print(Panel(f"[bold blue]{kind.title()}[/bold blue]"))
             parts: list[str] = []
+            title = f"[bold blue]{kind.title()}[/bold blue]"
             try:
-                for token in self._ollama.generate_stream(self._utterances, kind):
-                    print(token, end="", flush=True)
-                    parts.append(token)
-                print()
+                with Live(
+                    Spinner("dots", text=f"[dim]Generating {kind}…[/dim]"),
+                    console=console,
+                    refresh_per_second=15,
+                    transient=False,
+                ) as live:
+                    for token in self._ollama.generate_stream(self._utterances, kind):
+                        parts.append(token)
+                        live.update(Panel(Text("".join(parts)), title=title))
             except Exception as e:
-                console.print(f"\n[red]Generation failed: {e}[/red]")
+                console.print(f"[red]Generation failed: {e}[/red]")
+            if parts:
+                console.print(Panel(Text("".join(parts)), title=title))
             results[kind] = "".join(parts)
 
         self._save_results(results)
