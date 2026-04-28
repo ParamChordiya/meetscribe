@@ -33,6 +33,7 @@ class MeetScribeApp:
         self._ollama: OllamaClient | None = None
         self._meeting_start: datetime | None = None
         self._shutdown = threading.Event()
+        self._meeting_ended = threading.Event()  # signals main thread to run post-meeting menu
 
     # ── setup ─────────────────────────────────────────────────────────────────
 
@@ -69,7 +70,12 @@ class MeetScribeApp:
         )
 
         try:
-            self._shutdown.wait()
+            while not self._shutdown.is_set():
+                # Block until either a meeting ends or Ctrl+C.
+                # Timeout lets KeyboardInterrupt propagate promptly.
+                if self._meeting_ended.wait(timeout=1.0):
+                    self._meeting_ended.clear()
+                    self._process_ended_meeting()
         except KeyboardInterrupt:
             pass
         finally:
@@ -80,6 +86,7 @@ class MeetScribeApp:
 
     def stop_manual(self) -> None:
         self._on_meeting_end()
+        self._process_ended_meeting()
 
     # ── meeting events ────────────────────────────────────────────────────────
 
@@ -113,13 +120,20 @@ class MeetScribeApp:
         ))
 
     def _on_meeting_end(self) -> None:
+        """Called from the detector poll thread — do minimal work, signal main thread."""
         if not self._recording:
             return
         self._recording = False
-
-        console.print(Panel("[bold yellow]Meeting ended — processing...[/bold yellow]"))
         if self._capture:
-            self._capture.stop()
+            try:
+                self._capture.stop()
+            except Exception:
+                pass
+        self._meeting_ended.set()
+
+    def _process_ended_meeting(self) -> None:
+        """Called on the main thread after a meeting ends."""
+        console.print(Panel("[bold yellow]Meeting ended — processing...[/bold yellow]"))
 
         if not self._utterances:
             console.print("[dim]No speech detected.[/dim]")
